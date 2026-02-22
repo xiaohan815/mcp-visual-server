@@ -1,0 +1,33 @@
+{
+  "name": "mcp-visual-server",
+  "version": "1.0.0",
+  "description": "Visual MCP Server using local Ollama qwen2.5vl model",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-visual-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "mcp",
+    "visual",
+    "ollama",
+    "qwen",
+    "image-analysis"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
