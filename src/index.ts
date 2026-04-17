@@ -17,6 +17,56 @@ const ollama = new OllamaClient(
   process.env.OLLAMA_MODEL || 'qwen2.5vl:7b'
 );
 
+const IMAGE_PRESETS = {
+  default: { format: 'jpeg' as const, maxWidth: 1400, maxHeight: 1400, quality: 90 },
+  diagram: { format: 'png' as const, maxWidth: 1800, maxHeight: 1800 },
+  text: { format: 'png' as const, maxWidth: 2000, maxHeight: 2000 },
+  ui: { format: 'png' as const, maxWidth: 1600, maxHeight: 1600 },
+};
+
+function getRequiredStringArg(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Invalid argument "${key}": expected a non-empty string.`);
+  }
+
+  return value.trim();
+}
+
+function getExistingFilePath(filePath: string, label: string): string {
+  const resolvedPath = path.resolve(filePath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`${label} not found: ${filePath}`);
+  }
+
+  if (!fs.statSync(resolvedPath).isFile()) {
+    throw new Error(`${label} is not a file: ${filePath}`);
+  }
+
+  return resolvedPath;
+}
+
+function getEnumArg<T extends string>(
+  args: Record<string, unknown>,
+  key: string,
+  allowedValues: readonly T[],
+  fallback: T
+): T {
+  const value = args[key];
+
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== 'string' || !allowedValues.includes(value as T)) {
+    throw new Error(`Invalid argument "${key}": expected one of ${allowedValues.join(', ')}.`);
+  }
+
+  return value as T;
+}
+
 const server = new Server(
   {
     name: 'mcp-visual-server',
@@ -36,7 +86,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'ui_to_artifact',
-        description: 'Convert UI screenshot to code, design specs, design prompts, or natural language description. Covers the full process from frontend implementation to generative design prompts.',
+        description: '将 UI 截图转换为代码、设计规范、设计提示词或自然语言说明，覆盖从界面还原到设计产出的完整流程。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -56,7 +106,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'extract_text_from_screenshot',
-        description: 'Extract and recognize text from screenshots using advanced OCR capabilities. Specialized for code, terminal output, documents, and general text extraction.',
+        description: '从截图中提取并识别文字，适用于代码、终端输出、文档内容和通用 OCR 场景。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -70,7 +120,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'diagnose_error_screenshot',
-        description: 'Parse error dialog, stack, and log screenshots to provide localization and fix suggestions.',
+        description: '解析报错弹窗、堆栈和日志截图，帮助定位问题并给出修复建议。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -84,7 +134,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'understand_technical_diagram',
-        description: 'Generate structured understanding of technical diagrams such as architecture diagrams, flowcharts, UML, ER diagrams, etc.',
+        description: '对架构图、流程图、UML、ER 图等技术图进行结构化理解和说明。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -98,7 +148,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'analyze_data_visualization',
-        description: 'Read dashboards and statistical charts to summarize trends, anomalies, and business insights.',
+        description: '分析仪表盘和统计图表，总结趋势、异常点以及可能的业务洞察。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -112,7 +162,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'ui_diff_check',
-        description: 'Compare two UI screenshots to identify visual differences and implementation deviations. Specialized for UI quality assurance and design-to-implementation verification.',
+        description: '直接对比两张 UI 截图，识别视觉差异和实现偏差，并将 image1 视为参考设计、image2 视为待检查实现。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -130,7 +180,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'image_analysis',
-        description: 'General image understanding capability for visual content not covered by specialized tools.',
+        description: '通用图片理解工具，适用于不属于其他专项工具范围的视觉内容分析。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -149,7 +199,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'video_analysis',
-        description: 'Support video scene parsing for MP4/MOV/M4V (local max 8M) formats to capture key frames, events, and key points.',
+        description: '实验性视频分析占位工具，当前会校验 MP4/MOV/M4V 文件并说明后续基于 ffmpeg 的增强方向。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -181,109 +231,117 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'ui_to_artifact': {
-        const imagePath = args.image as string;
-        const outputType = (args.output_type as string) || 'code';
+        const imagePath = getExistingFilePath(getRequiredStringArg(args, 'image'), 'Image');
+        const outputType = getEnumArg(
+          args,
+          'output_type',
+          ['code', 'design_specs', 'design_prompt', 'description'] as const,
+          'code'
+        );
 
         const prompts: Record<string, string> = {
-          code: 'Analyze this UI screenshot and provide complete, production-ready code (HTML/CSS/JavaScript or React) to implement it. Include responsive design.',
+          code: 'Analyze this UI screenshot and produce production-ready frontend code. Match the layout, spacing, hierarchy, copy, states, and responsive behavior as closely as possible. Call out any details that are visually ambiguous instead of inventing them.',
           design_specs: 'Extract detailed design specifications from this UI including colors, typography, spacing, components, and layout patterns.',
           design_prompt: 'Convert this UI into detailed prompts for AI design tools like Figma AI or generative design.',
           description: 'Describe this UI in detail, explaining its structure, components, purpose, and user experience.',
         };
 
-        const result = await ollama.analyzeImage(imagePath, prompts[outputType]);
+        const result = await ollama.analyzeImage(imagePath, prompts[outputType], IMAGE_PRESETS.ui);
         return { content: [{ type: 'text', text: result }] };
       }
 
       case 'extract_text_from_screenshot': {
-        const imagePath = args.image as string;
+        const imagePath = getExistingFilePath(getRequiredStringArg(args, 'image'), 'Image');
 
         const result = await ollama.analyzeImage(
           imagePath,
-          'Extract and transcribe ALL text from this image. Return the text exactly as it appears, preserving formatting and structure. If there is code, return it as a code block. If there are multiple text regions, organize them clearly.'
+          'Extract and transcribe ALL visible text from this image. Preserve line breaks, indentation, tables, and section order as faithfully as possible. If any text is partially illegible, mark it as [unclear] instead of guessing. If there is code, return it in fenced code blocks.',
+          IMAGE_PRESETS.text
         );
 
         return { content: [{ type: 'text', text: result }] };
       }
 
       case 'diagnose_error_screenshot': {
-        const imagePath = args.image as string;
+        const imagePath = getExistingFilePath(getRequiredStringArg(args, 'image'), 'Image');
 
         const result = await ollama.analyzeImage(
           imagePath,
-          'This is an error screenshot. Analyze it carefully. Identify: 1) The error type and message, 2) The stack trace or error location, 3) Likely root causes, 4) Specific solutions or fixes to resolve this error. Be precise and actionable.'
+          'This is an error screenshot. First transcribe the exact visible error text, stack trace, and file locations. Then identify: 1) the primary error, 2) likely root causes, 3) the most relevant code or config area to inspect, and 4) specific fixes. If the screenshot is blurry or incomplete, say what is uncertain.',
+          IMAGE_PRESETS.text
         );
 
         return { content: [{ type: 'text', text: result }] };
       }
 
       case 'understand_technical_diagram': {
-        const imagePath = args.image as string;
+        const imagePath = getExistingFilePath(getRequiredStringArg(args, 'image'), 'Image');
 
         const result = await ollama.analyzeImage(
           imagePath,
-          'Analyze this technical diagram and provide a structured understanding. Include: 1) Diagram type (architecture, flowchart, UML, ER, etc.), 2) Main components and their roles, 3) Relationships and data flow between components, 4) Key patterns or decisions represented. Format your response as markdown.'
+          'Analyze this technical diagram and provide a structured explanation in markdown. Include: 1) diagram type, 2) main components and responsibilities, 3) relationships or data flow, and 4) notable architectural patterns or decisions. If any labels are hard to read, call that out explicitly.',
+          IMAGE_PRESETS.diagram
         );
 
         return { content: [{ type: 'text', text: result }] };
       }
 
       case 'analyze_data_visualization': {
-        const imagePath = args.image as string;
+        const imagePath = getExistingFilePath(getRequiredStringArg(args, 'image'), 'Image');
 
         const result = await ollama.analyzeImage(
           imagePath,
-          'Analyze this data visualization or dashboard. Identify: 1) Type of chart and what it shows, 2) Key trends and patterns, 3) Any anomalies or outliers, 4) Business insights or conclusions. Provide specific numbers when visible.'
+          'Analyze this data visualization or dashboard. Identify: 1) chart type and what is being measured, 2) clearly visible values or ranges, 3) key trends and anomalies, and 4) reasonable business insights. Separate direct observations from inferences, and do not fabricate numbers that are not legible.',
+          IMAGE_PRESETS.diagram
         );
 
         return { content: [{ type: 'text', text: result }] };
       }
 
       case 'ui_diff_check': {
-        const image1Path = args.image1 as string;
-        const image2Path = args.image2 as string;
+        const image1Path = getExistingFilePath(getRequiredStringArg(args, 'image1'), 'Reference image');
+        const image2Path = getExistingFilePath(getRequiredStringArg(args, 'image2'), 'Candidate image');
 
-        const result1 = await ollama.analyzeImage(image1Path, 'Describe this UI in detail.');
-        const result2 = await ollama.analyzeImage(image2Path, 'Describe this UI in detail.');
-
-        const comparison = await ollama.generate(
-          `Compare these two UI descriptions and identify ALL differences:\n\nUI 1:\n${result1}\n\nUI 2:\n${result2}\n\n\nProvide: 1) Visual differences (colors, spacing, alignment), 2) Content differences (text, elements, components), 3) Structural differences (layout, hierarchy), 4) Implementation deviations from design. Be thorough and specific.`
+        const comparison = await ollama.analyzeImages(
+          [image1Path, image2Path],
+          'Compare the two provided UI screenshots directly. Treat the first image as the reference design and the second image as the candidate implementation. Report only visible differences and organize the result into: 1) Summary, 2) Visual differences, 3) Content differences, 4) Structural differences, and 5) Implementation risks or QA follow-ups. Mention uncertainty when a detail is too small or blurry to verify.',
+          IMAGE_PRESETS.ui
         );
 
         return { content: [{ type: 'text', text: comparison }] };
       }
 
       case 'image_analysis': {
-        const imagePath = args.image as string;
-        const prompt = (args.prompt as string) || 'Describe this image in detail.';
+        const imagePath = getExistingFilePath(getRequiredStringArg(args, 'image'), 'Image');
+        const prompt = typeof args.prompt === 'string' && args.prompt.trim() !== ''
+          ? args.prompt.trim()
+          : 'Describe this image in detail.';
 
-        const result = await ollama.analyzeImage(imagePath, prompt);
+        const result = await ollama.analyzeImage(imagePath, prompt, IMAGE_PRESETS.default);
         return { content: [{ type: 'text', text: result }] };
       }
 
       case 'video_analysis': {
-        const videoPath = args.video_path as string;
-        const task = (args.task as string) || 'summary';
+        const videoPath = getExistingFilePath(getRequiredStringArg(args, 'video_path'), 'Video file');
+        const task = getEnumArg(
+          args,
+          'task',
+          ['summary', 'key_frames', 'events', 'transcript'] as const,
+          'summary'
+        );
+        const extension = path.extname(videoPath).toLowerCase();
+        const supportedExtensions = ['.mp4', '.mov', '.m4v'];
 
-        // Video analysis requires extracting frames first
-        // For MVP, we'll provide a simple implementation
-        if (!fs.existsSync(videoPath)) {
-          throw new Error(`Video file not found: ${videoPath}`);
+        if (!supportedExtensions.includes(extension)) {
+          throw new Error(`Unsupported video format "${extension || 'unknown'}". Supported formats: ${supportedExtensions.join(', ')}.`);
         }
 
-        const prompts: Record<string, string> = {
-          summary: 'Analyze the provided video frames and provide a summary of what happens.',
-          key_frames: 'Identify and describe the key frames in this video.',
-          events: 'List and describe the main events occurring in this video.',
-          transcript: 'Attempt to transcribe text or dialogue visible in this video.',
-        };
+        const fileSizeMb = (fs.statSync(videoPath).size / (1024 * 1024)).toFixed(2);
 
-        // Note: Full video frame extraction would require ffmpeg or similar
-        // For MVP, return a message about video support
         return {
           content: [{
             type: 'text',
-            text: `Video analysis requested for: ${videoPath}\n\nTask: ${task}\n\nNote: Full video frame extraction requires ffmpeg. The MCP server framework is ready - you can enhance this by adding frame extraction logic using ffmpeg or similar tools.\n\nFor now, the visual analysis tools work well with single images. If you have specific frames extracted, use the image_analysis tool.`
+            text: `Video analysis is currently experimental.\n\nValidated input: ${videoPath}\nTask: ${task}\nFormat: ${extension}\nSize: ${fileSizeMb} MB\n\nThis tool does not extract frames yet. The next implementation step is to add ffmpeg-based frame extraction, then pass key frames into the image analysis pipeline. Until then, extract representative frames manually and run them through image_analysis or ui_diff_check.`
           }]
         };
       }
