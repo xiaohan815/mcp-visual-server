@@ -1,60 +1,87 @@
 # MCP Visual Server
 
-A Model Context Protocol (MCP) server that provides visual understanding capabilities using local Ollama models.
+一个基于 Model Context Protocol（MCP）的服务，使用本地 Ollama 模型提供视觉理解能力。
 
-## Features
+## 功能特性
 
-This server implements 8 visual tools using the `qwen2.5vl:7b` model from Ollama:
+这个服务基于 Ollama 的 `qwen2.5vl:7b` 模型，提供 8 个视觉工具：
 
-### Tools
+### 工具列表
 
-1. **ui_to_artifact** - Convert UI screenshots to code, design specs, design prompts, or natural language descriptions
-2. **extract_text_from_screenshot** - OCR text extraction from screenshots (code, terminal, documents)
-3. **diagnose_error_screenshot** - Analyze error dialogs, stack traces, and logs
-4. **understand_technical_diagram** - Understand architecture diagrams, flowcharts, UML, ER diagrams
-5. **analyze_data_visualization** - Summarize trends, anomalies, and insights from dashboards and charts
-6. **ui_diff_check** - Compare two UI screenshots to identify visual differences
-7. **image_analysis** - General image understanding with custom prompts
-8. **video_analysis** - Video scene parsing (MVP - frame extraction to be enhanced)
+1. **ui_to_artifact** - 将 UI 截图转换为代码、设计规范、设计提示词或自然语言描述
+2. **extract_text_from_screenshot** - 从截图中提取文字，适用于代码、终端和文档等 OCR 场景
+3. **diagnose_error_screenshot** - 分析报错弹窗、堆栈和日志截图
+4. **understand_technical_diagram** - 理解架构图、流程图、UML、ER 图等技术图
+5. **analyze_data_visualization** - 总结仪表盘和图表中的趋势、异常和洞察
+6. **ui_diff_check** - 对比两张 UI 截图，识别视觉差异
+7. **image_analysis** - 支持自定义提示词的通用图片理解
+8. **video_analysis** - 视频场景解析框架（MVP，后续可增强帧提取能力）
 
-## Installation
+## 安装
 
-### Prerequisites
+### 前置条件
 
 - **Node.js** >= v18.0.0
-- **Ollama** running locally with `qwen2.5vl:7b` model
+- **Ollama** 已在本地运行，并可使用 `qwen2.5vl:7b` 模型
 
-### Install Ollama Model
+### 安装 Ollama 模型
 
 ```bash
-# Install Ollama if not already installed
+# 如果还没安装 Ollama，先安装
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Pull the qwen2.5vl model
+# 拉取 qwen2.5vl 模型
 ollama pull qwen2.5vl:7b
 
-# Verify the model is available
+# 确认模型已经可用
 ollama list
 ```
 
-### Install MCP Server
+### 安装 MCP 服务
 
 ```bash
-# Clone or navigate to the project directory
+# 克隆仓库或进入项目目录
 cd /path/to/mcp-visual-server
 
-# Install dependencies
+# 安装依赖
 npm install
 
-# Build the project
+# 构建项目
 npm run build
 ```
 
-## Usage
+## 使用方式
 
-### with Claude Desktop (Claude Code)
+### 在 Claude Code CLI 中使用
 
-Add to your Claude Desktop configuration (`claude.json`):
+使用 `claude mcp add` 命令添加这个服务：
+
+```bash
+claude mcp add local-visual \
+  --env OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+  --env OLLAMA_MODEL=qwen2.5vl:7b \
+  -- node /Users/xhm5/work/mcp-visual-server/dist/index.js
+```
+
+如果你希望把它加成用户级 MCP，而不是只在当前项目可用：
+
+```bash
+claude mcp add local-visual --scope user \
+  --env OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+  --env OLLAMA_MODEL=qwen2.5vl:7b \
+  -- node /Users/xhm5/work/mcp-visual-server/dist/index.js
+```
+
+添加完成后可以这样验证：
+
+```bash
+claude mcp list
+claude mcp get local-visual
+```
+
+### 在 Claude Desktop 中使用
+
+把下面的配置加入 Claude Desktop 的配置文件 `claude.json`：
 
 ```json
 {
@@ -67,9 +94,9 @@ Add to your Claude Desktop configuration (`claude.json`):
 }
 ```
 
-### with Cline (VS Code Extension)
+### 在 Cline 中使用（VS Code 扩展）
 
-Add to your Cline settings (`.vscode/settings.json` or MCP configuration):
+把下面的配置加入 Cline 设置中，例如 `.vscode/settings.json` 或 MCP 配置文件：
 
 ```json
 {
@@ -83,9 +110,9 @@ Add to your Cline settings (`.vscode/settings.json` or MCP configuration):
 }
 ```
 
-### with OpenCode
+### 在 OpenCode 中使用
 
-Add to your OpenCode configuration:
+把下面的配置加入 OpenCode 配置中：
 
 ```json
 {
@@ -99,40 +126,40 @@ Add to your OpenCode configuration:
 }
 ```
 
-### Direct Execution
+### 直接运行
 
-You can also run the server directly:
+你也可以直接启动这个服务：
 
 ```bash
 node dist/index.js
 ```
 
-## Configuration
+## 配置
 
-### Environment Variables
+### 环境变量
 
-- `OLLAMA_BASE_URL` - Ollama API base URL (default: `http://localhost:11434`)
-- `OLLAMA_MODEL` - Model to use (default: `qwen2.5vl:7b`)
+- `OLLAMA_BASE_URL` - Ollama API 地址，默认值：`http://localhost:11434`
+- `OLLAMA_MODEL` - 使用的模型名，默认值：`qwen2.5vl:7b`
 
-Example:
+示例：
 
 ```bash
 OLLAMA_BASE_URL=http://localhost:11434 OLLAMA_MODEL=qwen2.5vl:7b node dist/index.js
 ```
 
-## Testing
+## 测试
 
-Test the MCP server with the MCP Inspector:
+可以用 MCP Inspector 测试这个服务：
 
 ```bash
 npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
-This will launch a web interface where you can test all available tools.
+这会打开一个网页界面，你可以在里面测试所有可用工具。
 
-## Example Usage
+## 使用示例
 
-### UI to Code
+### UI 转代码
 
 ```json
 {
@@ -144,7 +171,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### Extract Text from Screenshot
+### 从截图中提取文字
 
 ```json
 {
@@ -155,7 +182,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### Diagnose Error from Screenshot
+### 从截图中诊断错误
 
 ```json
 {
@@ -166,7 +193,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### Understand Technical Diagram
+### 理解技术图
 
 ```json
 {
@@ -177,7 +204,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### Analyze Data Visualization
+### 分析数据可视化图表
 
 ```json
 {
@@ -188,7 +215,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### Compare UI Screenshots
+### 对比 UI 截图
 
 ```json
 {
@@ -200,7 +227,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### General Image Analysis
+### 通用图片分析
 
 ```json
 {
@@ -212,7 +239,7 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-### Video Analysis (MVP)
+### 视频分析（MVP）
 
 ```json
 {
@@ -224,12 +251,12 @@ This will launch a web interface where you can test all available tools.
 }
 ```
 
-## Video Analysis Enhancement (Future Work)
+## 视频分析增强方向（后续工作）
 
-The current video analysis feature provides a framework but requires additional tooling for full functionality:
+当前的视频分析功能只是一个框架，要真正可用还需要补充额外能力：
 
-To enhance:
-1. **Install ffmpeg** for video frame extraction:
+1. **安装 ffmpeg**，用于从视频中提取帧：
+
    ```bash
    # Ubuntu/Debian
    sudo apt-get install ffmpeg
@@ -238,85 +265,57 @@ To enhance:
    brew install ffmpeg
    ```
 
-2. **Add frame extraction logic** in the video_analysis tool to:
-   - Extract key frames from the video
-   - Pass frames to the visual model for analysis
-   - Compile results into a comprehensive summary
+2. **在 `video_analysis` 工具中补充帧提取逻辑**，实现：
 
-## Architecture
+   - 从视频中提取关键帧
+   - 把关键帧送入视觉模型分析
+   - 汇总结果，生成完整总结
 
-```
+## 项目结构
+
+```text
 mcp-visual-server/
 ├── src/
-│   ├── index.ts          # MCP server entry point
-│   ├── ollama.ts         # Ollama client wrapper
-│   └── tools/            # Tool implementations (organized by functionality)
-├── dist/                 # Compiled JavaScript
+│   ├── index.ts          # MCP 服务入口
+│   ├── ollama.ts         # Ollama 客户端封装
+│   └── tools/            # 工具实现（按功能组织）
+├── dist/                 # 编译后的 JavaScript
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
-## Development
+## 开发
 
 ```bash
-# Watch mode for development
+# 开发模式，自动监听并重新编译
 npm run dev
 
-# Run tests
+# 运行测试
 npm test
 
-# Build for production
+# 生产构建
 npm run build
 ```
 
-## Troubleshooting
+## 常见问题
 
-### Ollama Not Running
+### Ollama 没有启动
 
 ```bash
-# Check if Ollama is running
+# 检查 Ollama 是否正在运行
 curl http://localhost:11434/api/tags
 
-# Start Ollama if not running
+# 如果没有运行，启动 Ollama
 ollama serve
 ```
 
-### Model Not Available
+### 模型不可用
 
 ```bash
-# List available models
+# 查看当前可用模型
 ollama list
 
-# Pull the required model
+# 拉取项目需要的模型
 ollama pull qwen2.5vl:7b
 ```
-
-### TypeScript Build Errors
-
-```bash
-# Clean and rebuild
-rm -rf dist node_modules
-npm install
-npm run build
-```
-
-## Performance Considerations
-
-- The `qwen2.5vl:7b` model is relatively large (~6GB) and may take some time to load initially
-- Images are resized to max 1024x1024 before analysis for performance
-- First request may be slower as the model warms up
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Credits
-
-- Based on [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
-- Uses [Ollama](https://ollama.ai/) for local model inference
-- Visual model: Qwen2.5-VL by Alibaba Cloud
